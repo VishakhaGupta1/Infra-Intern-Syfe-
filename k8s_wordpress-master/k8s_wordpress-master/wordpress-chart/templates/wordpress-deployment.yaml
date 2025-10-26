@@ -1,13 +1,10 @@
-
-
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: {{ .Release.Name }}-wordpress-pvc
 spec:
   accessModes:
-    - ReadWriteMany
-  storageClassName: efs-sc
+    - ReadWriteOnce 
   resources:
     requests:
       storage: {{ .Values.wordpress.persistence.size }}
@@ -55,3 +52,4 @@ spec:
     - protocol: TCP
       port: 80
       targetPort: 80
+
