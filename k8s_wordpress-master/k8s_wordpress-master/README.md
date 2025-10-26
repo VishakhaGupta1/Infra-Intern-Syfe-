@@ -3,7 +3,6 @@ Kubernetes WordPress Deployment (Local Environment)
 This guide provides instructions for deploying a production-grade WordPress application, including MySQL and a Lua-enabled OpenResty Nginx proxy, on a local Kubernetes cluster (like Minikube or Docker Desktop).
 
 Project Structure Overview
-
 ├── DockerFiles
 │   ├── dockerfile.mysql
 │   ├── dockerfile.wordpress
@@ -20,7 +19,6 @@ Project Structure Overview
     │   ├── nginx-deployment.yaml
     │   ├── wordpress-deployment.yaml
     └── values.yaml
-
 
 Prerequisites
 
@@ -41,7 +39,6 @@ Deployment Guide: WordPress Application (Objective #1)
 Step 1: Start Kubernetes and Configure Docker Environment
 
 Start your local cluster and ensure your Docker environment is connected to it so Kubernetes can access the images you build.
-
 # 1. Start Minikube (or verify Docker Desktop Kubernetes is running)
 minikube start
 
