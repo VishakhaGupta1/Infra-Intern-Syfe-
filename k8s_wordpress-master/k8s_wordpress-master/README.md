@@ -4,7 +4,39 @@ This guide provides instructions for deploying a production-grade WordPress appl
 
 Project Structure Overview
 
-├── DockerFiles │ ├── dockerfile.mysql │ ├── dockerfile.wordpress │ └── nginx │ ├── Dockerfile │ └── nginx.conf ├── monitoring │ └── prometheus │ └── prometheus-values.yaml └── wordpress-chart ├── Chart.yaml ├── templates │ ├── mysql-deployment.yaml │ ├── nginx-deployment.yaml │ └── wordpress-deployment.yaml └── values.yaml
+The repository structure is organized as follows:
+
+DockerFiles/
+
+dockerfile.mysql
+
+dockerfile.wordpress
+
+nginx/
+
+Dockerfile
+
+nginx.conf
+
+monitoring/
+
+prometheus/
+
+prometheus-values.yaml
+
+wordpress-chart/ (Helm Chart)
+
+Chart.yaml
+
+values.yaml
+
+templates/
+
+mysql-deployment.yaml
+
+nginx-deployment.yaml
+
+wordpress-deployment.yaml
 
 Prerequisites
 
@@ -26,11 +58,13 @@ Step 1: Start Kubernetes and Configure Docker Environment
 
 Start your local cluster and ensure your Docker environment is connected to it so Kubernetes can access the images you build.
 
-1. Start Minikube (or verify Docker Desktop Kubernetes is running)
+# 1. Start Minikube (or verify Docker Desktop Kubernetes is running)
 minikube start
 
-2. Point your local Docker CLI to Minikube's Docker daemon
+
+# 2. Point your local Docker CLI to Minikube's Docker daemon
 eval $(minikube docker-env)
+
 
 Step 2: Build and Load Docker Images Locally
 
@@ -38,31 +72,37 @@ Build the container images and tag them using the names specified in wordpress-c
 
 Run these commands from the root directory of the project.
 
-1. Build WordPress Image
+# 1. Build WordPress Image
 sudo docker build -t yashingole1000/wordpress-image:latest -f dockerfiles/wordpress.dockerfile .
 
-2. Build MySQL Image
+
+# 2. Build MySQL Image
 sudo docker build -t yashingole1000/mysql-image:latest -f dockerfiles/mysql.dockerfile .
 
-3. Build Nginx Image (OpenResty with Lua modules)
+
+# 3. Build Nginx Image (OpenResty with Lua modules)
 sudo docker build -t yashingole1000/my-nginx:latest -f dockerfiles/nginx/Dockerfile dockerfiles/nginx
+
 
 Step 3: Install the WordPress Helm Chart
 
 This installation deploys the database, application, and proxy service using the corrected local configurations (NodePort service type, default storage).
 
-Install the chart using the release name 'my-release'
+# Install the chart using the release name 'my-release'
 helm install my-release ./wordpress-chart
 
-Verify that all components are running
+
+# Verify that all components are running
 kubectl get pods -w
+
 
 Step 4: Access the WordPress Application
 
 The Nginx Service is exposed via NodePort. Use the minikube service command to get the external URL.
 
-Get the external URL for the Nginx proxy (which forwards to WordPress)
+# Get the external URL for the Nginx proxy (which forwards to WordPress)
 minikube service my-release-nginx --url
+
 
 Paste the resulting URL into your browser to complete the WordPress setup.
 
@@ -72,16 +112,22 @@ Step 5: Install Prometheus and Grafana
 
 We will deploy the monitoring stack, ensuring Prometheus uses the fixed configuration to scrape Nginx metrics.
 
-Add Helm repositories and create namespace
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts helm repo add grafana https://grafana.github.io/helm-charts helm repo update kubectl create namespace monitoring
+# Add Helm repositories and create namespace
+helm repo add prometheus-community [https://prometheus-community.github.io/helm-charts](https://prometheus-community.github.io/helm-charts)
+helm repo add grafana [https://grafana.github.io/helm-charts](https://grafana.github.io/helm-charts)
+helm repo update
+kubectl create namespace monitoring
 
-Install Prometheus using the custom values file (prometheus-values.yaml)
-helm install prometheus prometheus-community/kube-prometheus-stack
---namespace monitoring
--f monitoring/prometheus/prometheus-values.yaml
 
-Install Grafana
+# Install Prometheus using the custom values file (prometheus-values.yaml)
+helm install prometheus prometheus-community/kube-prometheus-stack \
+  --namespace monitoring \
+  -f monitoring/prometheus/prometheus-values.yaml
+
+
+# Install Grafana
 helm install grafana grafana/grafana --namespace monitoring
+
 
 Step 6: Access Grafana and Configure Dashboards
 
@@ -89,9 +135,11 @@ Access Grafana: Forward the Grafana service port to your local machine (http://l
 
 kubectl port-forward svc/grafana --namespace monitoring 3000:80
 
+
 Retrieve Admin Password:
 
 kubectl get secret --namespace monitoring grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
+
 
 Create Custom Dashboard Panels: Once logged in, configure Prometheus as a data source, and create panels using the following PromQL queries to meet the assignment requirements:
 
@@ -115,4 +163,7 @@ Clean Up
 
 To remove all deployed components from your cluster:
 
-helm uninstall my-release helm uninstall prometheus --namespace monitoring helm uninstall grafana --namespace monitoring kubectl delete namespace monitoring
+helm uninstall my-release
+helm uninstall prometheus --namespace monitoring
+helm uninstall grafana --namespace monitoring
+kubectl delete namespace monitoring
