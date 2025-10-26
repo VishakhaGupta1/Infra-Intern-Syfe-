@@ -2,15 +2,25 @@ Kubernetes WordPress Deployment (Local Environment)
 
 This guide provides instructions for deploying a production-grade WordPress application, including MySQL and a Lua-enabled OpenResty Nginx proxy, on a local Kubernetes cluster (like Minikube or Docker Desktop).
 
-Project Objectives (Infra Intern Assignment)
+Project Structure Overview
 
-Run a production-grade WordPress app on Kubernetes using Helm.
+├── DockerFiles
+│   ├── dockerfile.mysql
+│   ├── dockerfile.wordpress
+│   └── nginx
+│       ├── Dockerfile
+│       ├── nginx.conf
+├── monitoring
+│   ├── prometheus
+│   │   ├── prometheus-values.yaml
+└── wordpress-chart
+    ├── Chart.yaml
+    ├── templates
+    │   ├── mysql-deployment.yaml
+    │   ├── nginx-deployment.yaml
+    │   ├── wordpress-deployment.yaml
+    └── values.yaml
 
-Use PersistentVolumeClaims (PVCs) for stateful components (MySQL, WordPress files).
-
-Use OpenResty Nginx as a proxy with custom Lua configuration.
-
-Set up Prometheus and Grafana for monitoring and alerting.
 
 Prerequisites
 
@@ -22,19 +32,17 @@ kubectl: Kubernetes command-line tool.
 
 helm: Kubernetes package manager.
 
-Docker: For building and managing container images.
+Docker: For building container images.
 
 Git: For version control.
 
-Deployment Guide: WordPress Application
-
-This section handles the deployment of MySQL, WordPress, and Nginx (Objective #1).
+Deployment Guide: WordPress Application (Objective #1)
 
 Step 1: Start Kubernetes and Configure Docker Environment
 
-Start your chosen local Kubernetes cluster and connect your local shell's Docker commands to it.
+Start your local cluster and ensure your Docker environment is connected to it so Kubernetes can access the images you build.
 
-# 1. Start Minikube (or ensure Docker Desktop Kubernetes is running)
+# 1. Start Minikube (or verify Docker Desktop Kubernetes is running)
 minikube start
 
 # 2. Point your local Docker CLI to Minikube's Docker daemon
@@ -43,11 +51,10 @@ eval $(minikube docker-env)
 
 Step 2: Build and Load Docker Images Locally
 
-We will build the container images and load them directly into the cluster's image cache, avoiding the need to push to Docker Hub.
+Build the container images and tag them using the names specified in wordpress-chart/values.yaml.
 
-Ensure you run these commands from the root directory of the project, where the dockerfiles folder resides.
+Run these commands from the root directory of the project.
 
-# Note: Image names must match the values in wordpress-chart/values.yaml
 # 1. Build WordPress Image
 sudo docker build -t yashingole1000/wordpress-image:latest -f dockerfiles/wordpress.dockerfile .
 
@@ -55,18 +62,17 @@ sudo docker build -t yashingole1000/wordpress-image:latest -f dockerfiles/wordpr
 sudo docker build -t yashingole1000/mysql-image:latest -f dockerfiles/mysql.dockerfile .
 
 # 3. Build Nginx Image (OpenResty with Lua modules)
-# The build context is specified as the nginx folder.
 sudo docker build -t yashingole1000/my-nginx:latest -f dockerfiles/nginx/Dockerfile dockerfiles/nginx
 
 
 Step 3: Install the WordPress Helm Chart
 
-Use Helm to deploy the application stack. All cloud-specific PVC and service configurations have been corrected in the template files to work locally.
+This installation deploys the database, application, and proxy service using the corrected local configurations (NodePort service type, default storage).
 
 # Install the chart using the release name 'my-release'
 helm install my-release ./wordpress-chart
 
-# Verify that all components are starting up (wait for STATUS to be Running)
+# Verify that all components are running
 kubectl get pods -w
 
 
@@ -78,25 +84,21 @@ The Nginx Service is exposed via NodePort. Use the minikube service command to g
 minikube service my-release-nginx --url
 
 
-Paste the resulting URL (http://<ip>:<port>) into your browser to complete the WordPress setup.
+Paste the resulting URL into your browser to complete the WordPress setup.
 
-Deployment Guide: Monitoring and Alerting
-
-This section handles the deployment of the Prometheus/Grafana stack (Objective #2).
+Deployment Guide: Monitoring and Alerting (Objective #2)
 
 Step 5: Install Prometheus and Grafana
 
-We will install the monitoring stack in a dedicated namespace.
+We will deploy the monitoring stack, ensuring Prometheus uses the fixed configuration to scrape Nginx metrics.
 
-# Add the required Helm repositories
+# Add Helm repositories and create namespace
 helm repo add prometheus-community [https://prometheus-community.github.io/helm-charts](https://prometheus-community.github.io/helm-charts)
 helm repo add grafana [https://grafana.github.io/helm-charts](https://grafana.github.io/helm-charts)
 helm repo update
-
-# Create the monitoring namespace
 kubectl create namespace monitoring
 
-# Install Prometheus using your custom values file (which now targets the 'nginx' service)
+# Install Prometheus using the custom values file (prometheus-values.yaml)
 helm install prometheus prometheus-community/kube-prometheus-stack \
   --namespace monitoring \
   -f monitoring/prometheus/prometheus-values.yaml
@@ -107,10 +109,9 @@ helm install grafana grafana/grafana --namespace monitoring
 
 Step 6: Access Grafana and Configure Dashboards
 
-Access Grafana: Forward the Grafana service port to your local machine.
+Access Grafana: Forward the Grafana service port to your local machine (http://localhost:3000).
 
 kubectl port-forward svc/grafana --namespace monitoring 3000:80
-# Access Grafana at http://localhost:3000
 
 
 Retrieve Admin Password:
@@ -118,13 +119,11 @@ Retrieve Admin Password:
 kubectl get secret --namespace monitoring grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
 
 
-Configure Prometheus Data Source: In Grafana, set up Prometheus as a data source using the URL http://prometheus:9090.
-
-Create Custom Dashboard Panels: Use the following PromQL queries to meet the assignment requirements:
+Create Custom Dashboard Panels: Once logged in, configure Prometheus as a data source, and create panels using the following PromQL queries to meet the assignment requirements:
 
 Metric Required
 
-PromQL Query (Targeting Container Metrics)
+PromQL Query
 
 Pod CPU Utilization
 
@@ -140,14 +139,9 @@ sum(rate(nginx_http_requests_total{status=~"5.."}[5m])) by (instance)
 
 Clean Up
 
-To remove all deployed components:
+To remove all deployed components from your cluster:
 
-# Uninstall the WordPress application stack
 helm uninstall my-release
-
-# Uninstall the monitoring stack
 helm uninstall prometheus --namespace monitoring
 helm uninstall grafana --namespace monitoring
-
-# Delete the namespace
 kubectl delete namespace monitoring
