@@ -1,0 +1,5 @@
+apiVersion: v2
+name: wordpress-production
+description: A Helm chart for running a production-grade WordPress app on Kubernetes
+version: 0.1.0
+appVersion: "1.0.0"

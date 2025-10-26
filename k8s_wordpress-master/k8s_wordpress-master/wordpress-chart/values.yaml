@@ -1,0 +1,24 @@
+# MySQL values
+mysql:
+  image:
+    repository: yashingole1000/mysql-image
+    tag: latest
+  rootPassword: abcd1234
+  persistence:
+    size: 20Gi
+
+# WordPress values
+wordpress:
+  image:
+    repository: yashingole1000/wordpress-image
+    tag: latest
+  dbHost: wordpress-mysql
+  dbPassword: abcd1234  # Use plain text password here
+  persistence:
+    size: 20Gi
+
+# Nginx values
+nginx:
+  image:
+    repository: yashingole1000/my-nginx
+    tag: latest

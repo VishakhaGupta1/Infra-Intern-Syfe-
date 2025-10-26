@@ -1,0 +1,17 @@
+serverFiles:
+  prometheus.yml:
+    scrape_configs:
+      - job_name: 'nginx-loadbalancer'
+        kubernetes_sd_configs:
+        - role: service
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_service_label_app]
+          regex: nginx-ingress
+          action: keep
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+          action: keep
+          regex: true
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_port]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
