@@ -1,261 +1,153 @@
-## EKS WordPress Deployment
+Kubernetes WordPress Deployment (Local Environment)
 
-### Project Structure Overview
+This guide provides instructions for deploying a production-grade WordPress application, including MySQL and a Lua-enabled OpenResty Nginx proxy, on a local Kubernetes cluster (like Minikube or Docker Desktop).
 
-```
-├── DockerFiles
-│   ├── dockerfile.mysql
-│   ├── dockerfile.wordpress
-│   └── nginx
-│       ├── Dockerfile
-│       ├── nginx.conf
-├── monitoring
-│   ├── prometheus
-│   │   ├── prometheus-values.yaml
-└── wordpress-chart
-    ├── Chart.yaml
-    ├── templates
-    │   ├── mysql-deployment.yaml
-    │   ├── nginx-deployment.yaml
-    │   ├── pvc.yaml
-    │   ├── wordpress-deployment.yaml
-    └── values.yaml
-```
+Project Objectives (Infra Intern Assignment)
 
-### Prerequisites
+Run a production-grade WordPress app on Kubernetes using Helm.
 
-Ensure you have the following installed and configured:
+Use PersistentVolumeClaims (PVCs) for stateful components (MySQL, WordPress files).
 
-1. **AWS CLI**: For managing AWS resources.
-2. **kubectl**: For interacting with Kubernetes clusters.
-3. **helm**: For managing Kubernetes applications.
-4. **Docker**: For building and pushing container images.
-5. **Git**: For version control and managing repositories.
+Use OpenResty Nginx as a proxy with custom Lua configuration.
 
-### Step-by-Step Deployment Guide
+Set up Prometheus and Grafana for monitoring and alerting.
 
-#### Step 1: Set Up Amazon EKS Cluster
+Prerequisites
 
-1. **Create an EKS Cluster:**
+Ensure the following tools are installed and configured on your local machine:
 
-   ```sh
-   eksctl create cluster --name my-wordpress-cluster --region us-west-2 --nodegroup-name standard-workers --node-type t3.medium --nodes 3 --nodes-min 1 --nodes-max 4 --managed
-   ```
+Local Kubernetes Cluster: Install and start either Minikube or Docker Desktop (with Kubernetes enabled).
 
-2. **Configure `kubectl` to Use Your EKS Cluster:**
+kubectl: Kubernetes command-line tool.
 
-   ```sh
-   aws eks --region us-west-2 update-kubeconfig --name my-wordpress-cluster
-   ```
+helm: Kubernetes package manager.
 
-#### Step 2: Set Up EFS CSI Driver
+Docker: For building and managing container images.
 
-1. **Create IAM Policy for EFS CSI Driver:**
+Git: For version control.
 
-   ```sh
-   aws iam create-policy --policy-name EKS_EFS_CSI_Driver_Policy-2 --policy-document file://newpolicy.json
-   ```
+Deployment Guide: WordPress Application
 
-2. **Create IAM Service Account and Attach Policy:**
+This section handles the deployment of MySQL, WordPress, and Nginx (Objective #1).
 
-   ```sh
-   eksctl create iamserviceaccount --cluster my-wordpress-cluster --namespace kube-system --name efs-csi-controller-sa --attach-policy-arn arn:aws:iam::409943371208:policy/EKS_EFS_CSI_Driver_Policy-2 --approve --region us-east-2 --override-existing-serviceaccounts
-   ```
+Step 1: Start Kubernetes and Configure Docker Environment
 
-3. **Ensure EFS is in the Same VPC as the EKS Cluster.**
+Start your chosen local Kubernetes cluster and connect your local shell's Docker commands to it.
 
-4. **Add Helm Repo for EFS CSI Driver:**
+# 1. Start Minikube (or ensure Docker Desktop Kubernetes is running)
+minikube start
 
-   ```sh
-   helm repo add aws-efs-csi-driver https://kubernetes-sigs.github.io/aws-efs-csi-driver/
-   ```
+# 2. Point your local Docker CLI to Minikube's Docker daemon
+eval $(minikube docker-env)
 
-5. **Update Helm Repo:**
 
-   ```sh
-   helm repo update aws-efs-csi-driver
-   ```
+Step 2: Build and Load Docker Images Locally
 
-6. **Install EFS CSI Driver Using Helm:**
+We will build the container images and load them directly into the cluster's image cache, avoiding the need to push to Docker Hub.
 
-   ```sh
-   helm upgrade --install aws-efs-csi-driver --namespace kube-system aws-efs-csi-driver/aws-efs-csi-driver
-   ```
+Ensure you run these commands from the root directory of the project, where the dockerfiles folder resides.
 
-#### Step 3: Create PersistentVolumeClaims and PersistentVolumes
+# Note: Image names must match the values in wordpress-chart/values.yaml
+# 1. Build WordPress Image
+sudo docker build -t yashingole1000/wordpress-image:latest -f dockerfiles/wordpress.dockerfile .
 
-1. **Create `pvc.yaml`:**
+# 2. Build MySQL Image
+sudo docker build -t yashingole1000/mysql-image:latest -f dockerfiles/mysql.dockerfile .
 
-   This file includes configurations for PersistentVolumes (PV) and PersistentVolumeClaims (PVC).
+# 3. Build Nginx Image (OpenResty with Lua modules)
+# The build context is specified as the nginx folder.
+sudo docker build -t yashingole1000/my-nginx:latest -f dockerfiles/nginx/Dockerfile dockerfiles/nginx
 
-#### Step 4: Create Dockerfiles
 
-1. **Dockerfiles for Each Component:**
+Step 3: Install the WordPress Helm Chart
 
-   - **`Dockerfile.wordpress`**: For WordPress.
-   - **`Dockerfile.mysql`**: For MySQL.
-   - **`Dockerfile.nginx`**: For Nginx.
+Use Helm to deploy the application stack. All cloud-specific PVC and service configurations have been corrected in the template files to work locally.
 
-   **Configuration for OpenResty Nginx Dockerfile:**
+# Install the chart using the release name 'my-release'
+helm install my-release ./wordpress-chart
 
-   ```Dockerfile
-   FROM openresty/openresty:1.19.9.1
-   RUN ./configure --prefix=/opt/openresty \
-       --with-pcre-jit \
-       --with-ipv6 \
-       --without-http_redis2_module \
-       --with-http_iconv_module \
-       --with-http_postgres_module \
-       -j8
-   COPY nginx.conf /usr/local/openresty/nginx/conf/nginx.conf
-   ```
+# Verify that all components are starting up (wait for STATUS to be Running)
+kubectl get pods -w
 
-2. **Create `nginx.conf`:**
 
-   Define the Nginx configuration to set up a proxy pass from Nginx to WordPress.
+Step 4: Access the WordPress Application
 
-#### Step 5: Build and Push Docker Images
+The Nginx Service is exposed via NodePort. Use the minikube service command to get the external URL.
 
-1. **Build Docker Images:**
+# Get the external URL for the Nginx proxy (which forwards to WordPress)
+minikube service my-release-nginx --url
 
-   ```sh
-   sudo docker build -t yashingole1000/wordpress:v1 -f DockerFiles/dockerfile.wordpress .
-   sudo docker build -t yashingole1000/mysql:v1 -f DockerFiles/dockerfile.mysql .
-   sudo docker build -t yashingole1000/nginx:v1 -f DockerFiles/nginx/Dockerfile .
-   ```
 
-2. **Push Docker Images to Docker Hub:**
+Paste the resulting URL (http://<ip>:<port>) into your browser to complete the WordPress setup.
 
-   ```sh
-   sudo docker push yashingole1000/wordpress:v1
-   sudo docker push yashingole1000/mysql:v1
-   sudo docker push yashingole1000/nginx:v1
-   ```
+Deployment Guide: Monitoring and Alerting
 
-#### Step 6: Configure Helm Chart
+This section handles the deployment of the Prometheus/Grafana stack (Objective #2).
 
-1. **Create a Helm Chart:**
+Step 5: Install Prometheus and Grafana
 
-   ```sh
-   helm create wordpress-chart
-   ```
+We will install the monitoring stack in a dedicated namespace.
 
-2. **Edit `wordpress-chart/values.yaml`:**
+# Add the required Helm repositories
+helm repo add prometheus-community [https://prometheus-community.github.io/helm-charts](https://prometheus-community.github.io/helm-charts)
+helm repo add grafana [https://grafana.github.io/helm-charts](https://grafana.github.io/helm-charts)
+helm repo update
 
-   Set values for the Helm chart, such as image repository, tag, and resource requests/limits.
-
-3. **Create `pvc.yaml` Inside the Helm Chart Directory:**
-
-   This file includes configurations for PersistentVolumes and PersistentVolumeClaims.
-
-4. **Create Helm Chart Templates:**
-
-   Define Kubernetes resources in YAML files within `wordpress-chart/templates/`. Example files include:
-
-   - **`mysql-deployment.yaml`**: Deployment configuration for MySQL.
-   - **`wordpress-deployment.yaml`**: Deployment configuration for WordPress.
-   - **`nginx-deployment.yaml`**: Deployment configuration for Nginx.
-   - **`mysql-service.yaml`**: Service configuration for MySQL.
-   - **`nginx-service.yaml`**: Service configuration for Nginx.
-   - **`wordpress-service.yaml`**: Service configuration for WordPress.
-   - **`pvc.yaml`**: Configuration for PersistentVolumes and PersistentVolumeClaims.
-
-   All relevant code for these files is included in the repository.
-
-5. **Install the Helm Chart:**
-
-   ```sh
-   helm install my-release ./wordpress-chart
-   ```
-
-6. **Clean Up Helm Release (if needed):**
-
-   ```sh
-   helm uninstall my-release
-   ```
-   ![kubectl get pods](https://github.com/user-attachments/assets/210b28f3-c24c-4dab-993a-83d4a98f41d7)
-
-   ![OpenResty using load balancer DNS](https://github.com/user-attachments/assets/1c497b32-87f3-44fe-a453-b43b18efb15b)
-### Monitoring Setup
-
-#### Add Prometheus and Grafana Repositories to Helm
-
-```sh
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-helm repo add grafana https://grafana.github.io/helm-charts
-```
-
-#### Create a New Namespace for Monitoring
-
-```sh
+# Create the monitoring namespace
 kubectl create namespace monitoring
-```
 
-#### Install Prometheus
+# Install Prometheus using your custom values file (which now targets the 'nginx' service)
+helm install prometheus prometheus-community/kube-prometheus-stack \
+  --namespace monitoring \
+  -f monitoring/prometheus/prometheus-values.yaml
 
-```sh
-helm install prometheus prometheus-community/kube-prometheus-stack --namespace monitoring
-```
-
-#### Access Prometheus GUI
-
-```sh
-kubectl port-forward svc/prometheus-kube-prometheus-prometheus --namespace monitoring 9090:9090
-```
-
-- **Check for Targets**: Ensure that Nginx and WordPress appear as targets in Prometheus.
-
-#### Install Grafana
-
-```sh
+# Install Grafana
 helm install grafana grafana/grafana --namespace monitoring
-kubectl port-forward svc/grafana 3000:3000
-```
 
-- **Access Grafana**: [http://localhost:3000](http://localhost:3000)
 
-![Screenshot 2024-07-25 144131](https://github.com/user-attachments/assets/d76d45e1-4e12-4f5f-887d-aafb87646086)
+Step 6: Access Grafana and Configure Dashboards
 
-#### Configure Prometheus Data Source in Grafana
+Access Grafana: Forward the Grafana service port to your local machine.
 
-1. **Set Prometheus as the Data Source:**
-   - Go to Grafana -> Configuration -> Data Sources.
-   - Add Prometheus and configure the URL as `http://prometheus:9090`.
+kubectl port-forward svc/grafana --namespace monitoring 3000:80
+# Access Grafana at http://localhost:3000
 
-2. **Create Grafana Dashboards:**
 
-   a. **Create a New Dashboard:**
-      - Go to Grafana -> Dashboards -> New Dashboard.
-      - Add a new panel for each of the following queries.
+Retrieve Admin Password:
 
-   b. **Run PromQL Queries in Grafana Panels:**
+kubectl get secret --namespace monitoring grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
 
-      - **Monitor Pod CPU Utilization:**
 
-        ```promql
-        sum(rate(container_cpu_usage_seconds_total{namespace="<your-namespace>", container!="POD"}[5m])) by (pod)
-        ```
+Configure Prometheus Data Source: In Grafana, set up Prometheus as a data source using the URL http://prometheus:9090.
 
-      - **Total Request Count for Nginx:**
+Create Custom Dashboard Panels: Use the following PromQL queries to meet the assignment requirements:
 
-        ```promql
-        sum(rate(nginx_http_requests_total[5m])) by (instance)
-        ```
+Metric Required
 
-      - **Total 5xx Requests for Nginx:**
+PromQL Query (Targeting Container Metrics)
 
-        ```promql
-        sum(rate(nginx_http_requests_total{status=~"5.."}[5m])) by (instance)
-        ```
+Pod CPU Utilization
 
-   c. **Save and Customize Dashboards:**
-      - Customize the appearance and layout of your dashboard to meet your monitoring needs.
-      - Save your dashboard for future reference.
+sum(rate(container_cpu_usage_seconds_total{namespace="default", container!="POD"}[5m])) by (pod)
 
-### Conclusion
+Total Request Count (Nginx)
 
-- **Code and Configurations**: All relevant files and configurations are available in the repository.
-- **Documentation**: Detailed README notes are provided for deploying and testing the setup.
-- **Screenshots**: Visual documentation is available in the `Screenshots` directory for reference.
+sum(rate(nginx_http_requests_total[5m])) by (instance)
 
-![Screenshot 2024-07-25 194046](https://github.com/user-attachments/assets/3b5d08fd-7a9d-47cd-a57e-e5e0b4d5365a)
+Total 5xx Requests (Nginx)
+
+sum(rate(nginx_http_requests_total{status=~"5.."}[5m])) by (instance)
+
+Clean Up
+
+To remove all deployed components:
+
+# Uninstall the WordPress application stack
+helm uninstall my-release
+
+# Uninstall the monitoring stack
+helm uninstall prometheus --namespace monitoring
+helm uninstall grafana --namespace monitoring
+
+# Delete the namespace
+kubectl delete namespace monitoring
