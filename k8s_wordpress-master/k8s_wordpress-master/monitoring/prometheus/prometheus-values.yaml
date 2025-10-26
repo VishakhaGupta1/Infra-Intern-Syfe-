@@ -6,7 +6,7 @@ serverFiles:
         - role: service
         relabel_configs:
         - source_labels: [__meta_kubernetes_service_label_app]
-          regex: nginx-ingress
+          regex: nginx 
           action: keep
         - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
           action: keep
