@@ -19,7 +19,8 @@ spec:
         - containerPort: 80
         volumeMounts:
         - name: nginx-config
-          mountPath: /usr/local/openresty/nginx/conf/nginx.conf
+          # Ensure this mount path matches the path used in the Nginx Dockerfile
+          mountPath: /opt/openresty/nginx/conf/nginx.conf
           subPath: nginx.conf
       volumes:
       - name: nginx-config
@@ -31,6 +32,11 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ .Release.Name }}-nginx
+  # 🛑 FIX: Add Prometheus scraping annotations 🛑
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: "/metrics"
+    prometheus.io/port: "80"
 spec:
   selector:
     app: nginx
@@ -52,14 +58,39 @@ data:
         worker_connections 1024;
     }
     http {
+        # 🛑 FIX: Initialize Prometheus metrics collector (Lua) 🛑
+        init_by_lua_block {
+            local prometheus = require("resty.prometheus").init({ allow_no_file = true })
+            prometheus:add_default_metrics()
+        }
+
         server {
             listen 80;
             server_name localhost;
+
+            # 🛑 FIX: Prometheus metrics endpoint 🛑
+            location /metrics {
+                content_by_lua_block {
+                    local prometheus = require("resty.prometheus")
+                    prometheus:collect()
+                }
+            }
+            
             location / {
                 proxy_pass http://{{ .Release.Name }}-wordpress;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+
+                # 🛑 FIX: Log request status to Prometheus metrics (Lua) 🛑
+                log_by_lua_block {
+                    local status = tonumber(ngx.var.status)
+                    local prometheus = require("resty.prometheus")
+                    if status then
+                        prometheus:inc("nginx_http_requests_total", 1, { status = status })
+                    end
+                }
             }
         }
     }
-
