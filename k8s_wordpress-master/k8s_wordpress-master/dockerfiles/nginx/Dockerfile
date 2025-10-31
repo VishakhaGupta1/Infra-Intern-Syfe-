@@ -13,11 +13,14 @@ RUN apt-get update && apt-get install -y \
     curl \
     git \
     libpq-dev \
-    luarocks \  
+    luarocks \
     && rm -rf /var/lib/apt/lists/*
 
 
-RUN luarocks install lua-resty-prometheus
+# 🛑 FIX: Download Prometheus library source file directly to bypass GitHub network error 🛑
+RUN curl -L https://luarocks.org/lua-resty-prometheus-1.1-0.src.rock -o lua-resty-prometheus-1.1-0.src.rock
+RUN luarocks install lua-resty-prometheus-1.1-0.src.rock
+RUN rm lua-resty-prometheus-1.1-0.src.rock
 
 
 RUN curl -fSL https://openresty.org/download/openresty-${OPENRESTY_VERSION}.tar.gz -o openresty.tar.gz \
