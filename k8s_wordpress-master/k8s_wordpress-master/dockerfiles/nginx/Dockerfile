@@ -1,4 +1,3 @@
-
 FROM ubuntu:20.04 AS builder
 
 
@@ -14,7 +13,11 @@ RUN apt-get update && apt-get install -y \
     curl \
     git \
     libpq-dev \
+    luarocks \  
     && rm -rf /var/lib/apt/lists/*
+
+
+RUN luarocks install lua-resty-prometheus
 
 
 RUN curl -fSL https://openresty.org/download/openresty-${OPENRESTY_VERSION}.tar.gz -o openresty.tar.gz \
