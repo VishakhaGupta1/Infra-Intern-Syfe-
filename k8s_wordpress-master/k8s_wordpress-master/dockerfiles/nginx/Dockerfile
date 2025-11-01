@@ -16,8 +16,6 @@ RUN apt-get update && apt-get install -y \
     luarocks \
     && rm -rf /var/lib/apt/lists/*
 
-
-# 🛑 FIX: Using standard Luarocks install to bypass corrupted download errors 🛑
 RUN luarocks install lua-resty-prometheus 1.1-0
 
 
